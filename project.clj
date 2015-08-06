@@ -1,4 +1,4 @@
-(defproject self-compile "0.1.0-SNAPSHOT"
+(defproject chrome-clojurescript-repl "0.1.0-SNAPSHOT"
   :description "FIXME: write this!"
   :url "http://example.com/FIXME"
   :dependencies [[org.clojure/clojure "1.7.0"]
