@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>self-compile</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <style>
+            /*
+            div.console { font-size: 14px }
+            div.console div.jquery-console-inner
+            { width:900px; height:200px; background:#333; padding:0.5em;
+            overflow:auto }
+            div.console div.jquery-console-prompt-box
+            { color:#fff; font-family:monospace; } */
+            div.console div.jquery-console-focus span.jquery-console-cursor
+            { background:black; color:#333; }
+            /*
+            div.console div.jquery-console-message-error
+            { color:#ef0505; font-family:sans-serif; font-weight:bold;
+            padding:0.1em; }
+            div.console div.jquery-console-message-value
+            { color:#1ad027; font-family:monospace;
+            padding:0.1em; }
+            div.console div.jquery-console-message-type
+            { color:#52666f; font-family:monospace;
+            padding:0.1em; }
+            div.console span.jquery-console-prompt-label { font-weight:bold } */
+        </style>
+    </head>
+    <body>
+        <script type="text/javascript" src="jquery-2.1.1.min.js"></script>
+        <script type="text/javascript" src="jquery.console.js"></script>
+        <script src="out/goog/base.js"></script>
+        <script src="out/cljs_deps.js"></script>
+        <script src="/require.js"></script>
+        <script type="text/javascript" src="/index.js"></script>
+    </body>
+</html>

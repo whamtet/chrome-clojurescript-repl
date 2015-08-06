@@ -1,0 +1,20 @@
+{
+  "manifest_version": 2,
+
+  "name": "ClojureScript REPL (Self Hosting)",
+  "description": "Self Hosting ClojureScript REPL for Chrome DevTools",
+  "version": "0.1.0",
+  "author": "Matthew Molloy",
+
+  "devtools_page": "devtools.html",
+
+  "permissions": [
+  ],
+
+  "icons": { "16": "icon16.png",
+            "48": "icon48.png",
+            "128": "icon128.png" },
+
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+
+}
