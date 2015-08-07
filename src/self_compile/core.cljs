@@ -11,21 +11,17 @@
 
 (def state (cljs.js/empty-state))
 
-(defn print-through [x] (println x) x)
-
 (defn cb [line cb2]
   (cljs.js/eval-str state line
                     (fn [response]
-                      (println response)
                       (cb2
                        (or
-                        (:value response)
-                        (if (contains? response :value)
-                          (try
-                            (cljs.reader/read-string line)
-                            line
-                            (catch js/Error e)))
+                        (if-let [value (:value response)]
+                          (pr-str value))
+                        (if (contains? response :value) line)
                         (when-let [error (:error response)]
-                          (println response)
                           (str "Error: " (str error)))
                         (pr-str response))))))
+
+(defn t []
+  (pr-str @state))
