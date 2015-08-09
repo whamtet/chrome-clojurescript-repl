@@ -7,7 +7,8 @@ var controller = container.console({
     if (line == "") return false;
     else return true;
   },
-  commandHandle:self_compile.core.cb,
+  commandHandle:planck.core.read_eval_print,
+//  commandHandle: self_compile.core.cb,
   autofocus:true,
   animateScroll:true,
   promptHistory:true,
