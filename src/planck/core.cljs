@@ -1,5 +1,7 @@
 (ns planck.core
-  (:require-macros [cljs.env.macros :refer [with-compiler-env]])
+  (:require-macros [cljs.env.macros :refer [with-compiler-env]]
+                   [planck.macro]
+                   )
   (:require [cljs.js :as cljs]
             [cljs.tagged-literals :as tags]
             [cljs.tools.reader :as r]
@@ -36,10 +38,13 @@
 (defn ns-form? [form]
   (and (seq? form) (= 'ns (first form))))
 
-(def repl-specials '#{in-ns require require-macros doc})
+(def repl-specials '#{in-ns require require-macros doc defmacro})
 
 (defn repl-special? [form]
   (and (seq? form) (repl-specials (first form))))
+
+(defn in-target? [form]
+  (and (seq? form) (= 'inject (first form))))
 
 (def repl-special-doc-map
   '{in-ns          {:arglists ([name])
@@ -55,7 +60,6 @@
   (assoc (repl-special-doc-map name-symbol)
     :name name-symbol
     :repl-special-function true))
-
 
 (defn resolve
   "Given an analysis environment resolve a var. Analogous to
@@ -115,16 +119,24 @@
     :loaded))
 
 (defn load [{:keys [name macros path] :as full} cb]
-  (prn full)
-  (loop [extensions (if macros
-                      [".clj" ".cljc"]
-                      [".cljs" ".cljc" ".js"])]
-    (if extensions
-      (when-not (load-and-callback! path (first extensions) cb)
-        (recur (next extensions)))
-      (cb nil))))
+  (let [
+        source (case name
+                 a.b "(ns a.b (:require-macros [repl.macros]))"
+                 repl.macros "(ns repl.macros) (defmacro m [] 3)")
+        ]
+    (println source)
+    (cb {:lang :clj
+         :source source}))
+  #_(loop [extensions (if macros
+                        [".clj" ".cljc"]
+                        [".cljs" ".cljc" ".js"])]
+      (if extensions
+        (when-not (load-and-callback! path (first extensions) cb)
+          (recur (next extensions)))
+        (cb nil))))
 
 (defn require [macros-ns? sym reload]
+  (prn ["pzzt" macros-ns? sym reload])
   (cljs.js/require
    {:*compiler*     st
     :*data-readers* tags/*cljs-data-readers*
@@ -136,10 +148,30 @@
     :verbose    (:verbose @app-env)
     :source-map true}
    (fn [res]
-     #_(println "require result:" res))))
+     (println "require result:" res))))
+
+(defn define-macro [source]
+  (cljs.js/require
+   {:*compiler*     st
+    :*data-readers* tags/*cljs-data-readers*
+    :*load-fn*      (fn [_ cb]
+                      (cb {:lang :clj
+                           :source ;"(ns repl.macros) (defmacro m [] 3)"
+                           (str "(ns repl.macros) " source)
+                           }))
+    :*eval-fn*      cljs/js-eval}
+   'repl.macros
+   true
+   {:macros-ns  true
+    :verbose    (:verbose @app-env)
+    :source-map true
+    }
+   (fn [res]
+     (println "require result:" res))))
 
 (defn require-destructure [macros-ns? args]
   (let [[[_ sym] reload] args]
+    (prn [_ sym reload])
     (require macros-ns? sym reload)))
 
 (defn ^:export run-main [main-ns args]
@@ -168,10 +200,10 @@
                                                (cljson->clj
                                                 (js/PLANCK_LOAD "cljs/core.js.map")))})))
 
-#_(defn print-error [error]
+(defn print-error [error]
   (let [cause (or (.-cause error) error)]
     (println (.-message cause))
-;    (load-core-source-maps!)
+    ;    (load-core-source-maps!)
     (let [canonical-stacktrace (st/parse-stacktrace
                                 {}
                                 (.-stack cause)
@@ -183,22 +215,38 @@
         (or (:source-maps @planck.core/st) {})
         nil)))))
 
-(defn print-error [error]
-  (throw error))
+#_(defn print-error [error]
+    (throw error))
+
+;;insert the bitch
+(if (and js/chrome.devtools (not js/cljs))
+  (js/chrome.devtools.inspectedWindow.eval
+   (str "
+        var s = document.createElement('script');
+        s.src= 'chrome-extension://" js/chrome.runtime.id "/out/self_compile.js'
+        document.head.appendChild(s)")))
+
 
 (defn ^:export read-eval-print [source cb]
   (let [
+        pr-cb #(cb (pr-str %))
         expression? true
         print-nil-expression? true
         ]
     (binding [ana/*cljs-ns* @current-ns
               *ns* (create-ns @current-ns)
               r/*data-readers* tags/*cljs-data-readers*]
-      (let [expression-form (and expression? (repl-read-string source))]
+      (let [expression-form (and expression? (repl-read-string source))
+            in-target? (in-target? expression-form)
+            expression-form (if in-target?
+                              (second expression-form) expression-form)
+            ]
         (if (repl-special? expression-form)
           (let [env (assoc (ana/empty-env) :context :expr
                       :ns {:name @current-ns})]
+            (cb "")
             (case (first expression-form)
+              defmacro (define-macro source)
               in-ns (reset! current-ns (second (second expression-form)))
               require (require-destructure false (rest expression-form))
               require-macros (require-destructure true (rest expression-form))
@@ -206,40 +254,47 @@
                     (repl/print-doc (repl-special-doc (second expression-form)))
                     (repl/print-doc
                      (let [sym (second expression-form)]
-                       (with-compiler-env st (resolve env sym))))))
-            (prn nil))
+                       (with-compiler-env st (resolve env sym)))))))
           (try
-            (cljs/eval-str
+            (cljs/eval
              st
-             source
-             (if expression? source "File")
+             expression-form
              (merge
               {:ns         @current-ns
                :load       load
-               :eval       cljs/js-eval
+               :eval       (fn [{:keys [source] :as x}]
+                             (if in-target?
+                               (try (js/chrome.devtools.inspectedWindow.eval source
+                                                                             (fn [res err]
+                                                                                 (pr-cb (or res err))))
+                                 (catch :default e (pr-cb e)))
+                               (pr-cb (js/eval source))))
                :source-map false
                :verbose    (:verbose @app-env)}
               (when expression?
                 {:context       :expr
                  :def-emits-var true}))
              (fn [{:keys [ns value error] :as ret}]
-               (if expression?
-                 (if-not error
-                   (do
-                     (when (or print-nil-expression?
-                               (not (nil? value)))
-                       (cb (pr-str value)))
-                     (when-not
-                       (or ('#{*1 *2 *3 *e} expression-form)
-                           (ns-form? expression-form))
-                       (set! *3 *2)
-                       (set! *2 *1)
-                       (set! *1 value))
-                     (reset! current-ns ns)
-                     nil)
-                   (do
-                     (set! *e error))))
-               (when error
-                 (print-error error))))
+               #_(if expression?
+                   (if-not error
+                     (do
+                       (when (or print-nil-expression?
+                                 (not (nil? value)))
+                         (pr-cb value))
+                       (when-not
+                         (or ('#{*1 *2 *3 *e} expression-form)
+                             (ns-form? expression-form))
+                         (set! *3 *2)
+                         (set! *2 *1)
+                         (set! *1 value))
+                       (reset! current-ns ns)
+                       nil)
+                     (do
+                       (set! *e error))))
+               #_(when error
+                   (pr-cb error)
+                   #_(print-error error))))
             (catch :default e
-              (print-error e))))))))
+              (pr-cb e)
+              #_(print-error e))))))))
+
