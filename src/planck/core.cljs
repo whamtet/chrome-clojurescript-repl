@@ -44,6 +44,7 @@
   (and (seq? form) (repl-specials (first form))))
 
 (defn in-target? [form]
+  (prn ["b" form])
   (and (seq? form) (= 'inject (first form))))
 
 (def repl-special-doc-map
@@ -230,71 +231,68 @@
 (defn ^:export read-eval-print [source cb]
   (let [
         pr-cb #(cb (pr-str %))
-        expression? true
-        print-nil-expression? true
         ]
-    (binding [ana/*cljs-ns* @current-ns
-              *ns* (create-ns @current-ns)
-              r/*data-readers* tags/*cljs-data-readers*]
-      (let [expression-form (and expression? (repl-read-string source))
-            in-target? (in-target? expression-form)
-            expression-form (if in-target?
-                              (second expression-form) expression-form)
-            ]
-        (if (repl-special? expression-form)
-          (let [env (assoc (ana/empty-env) :context :expr
-                      :ns {:name @current-ns})]
-            (cb "")
-            (case (first expression-form)
-              defmacro (define-macro source)
-              in-ns (reset! current-ns (second (second expression-form)))
-              require (require-destructure false (rest expression-form))
-              require-macros (require-destructure true (rest expression-form))
-              doc (if (repl-specials (second expression-form))
-                    (repl/print-doc (repl-special-doc (second expression-form)))
-                    (repl/print-doc
-                     (let [sym (second expression-form)]
-                       (with-compiler-env st (resolve env sym)))))))
-          (try
-            (cljs/eval
-             st
-             expression-form
-             (merge
-              {:ns         @current-ns
-               :load       load
-               :eval       (fn [{:keys [source] :as x}]
-                             (if in-target?
-                               (try (js/chrome.devtools.inspectedWindow.eval source
-                                                                             (fn [res err]
-                                                                                 (pr-cb (or res err))))
-                                 (catch :default e (pr-cb e)))
-                               (pr-cb (js/eval source))))
-               :source-map false
-               :verbose    (:verbose @app-env)}
-              (when expression?
-                {:context       :expr
-                 :def-emits-var true}))
-             (fn [{:keys [ns value error] :as ret}]
-               #_(if expression?
-                   (if-not error
-                     (do
-                       (when (or print-nil-expression?
-                                 (not (nil? value)))
-                         (pr-cb value))
-                       (when-not
-                         (or ('#{*1 *2 *3 *e} expression-form)
-                             (ns-form? expression-form))
-                         (set! *3 *2)
-                         (set! *2 *1)
-                         (set! *1 value))
-                       (reset! current-ns ns)
-                       nil)
-                     (do
-                       (set! *e error))))
-               #_(when error
-                   (pr-cb error)
-                   #_(print-error error))))
-            (catch :default e
-              (pr-cb e)
-              #_(print-error e))))))))
+    (try
+      (binding [ana/*cljs-ns* @current-ns
+                *ns* (create-ns @current-ns)
+                r/*data-readers* tags/*cljs-data-readers*]
+        (let [
+              expression-form (repl-read-string source)
+              expression-form (list 'pr-str expression-form)
+              ]
+          (if (repl-special? expression-form)
+            (let [env (assoc (ana/empty-env) :context :expr
+                        :ns {:name @current-ns})]
+              (cb "")
+              (case (first expression-form)
+                defmacro (define-macro source)
+                in-ns (reset! current-ns (second (second expression-form)))
+                require (require-destructure false (rest expression-form))
+                require-macros (require-destructure true (rest expression-form))
+                doc (if (repl-specials (second expression-form))
+                      (repl/print-doc (repl-special-doc (second expression-form)))
+                      (repl/print-doc
+                       (let [sym (second expression-form)]
+                         (with-compiler-env st (resolve env sym)))))))
+            (try
+              (cljs/eval
+               st
+               expression-form
+               {:ns         @current-ns
+                :load       load
+                :eval       (fn [{:keys [source] :as x}]
+                              (try (js/chrome.devtools.inspectedWindow.eval source
+                                                                            (fn [res err]
+                                                                              (if res
+                                                                                (cb res)
+                                                                                (pr-cb err))))
+
+                                (catch :default e (pr-cb e))))
+                :source-map false
+                :verbose    (:verbose @app-env)
+                :context       :expr
+                :def-emits-var true}
+               (fn [{:keys [ns value error] :as ret}]
+                 #_(if expression?
+                     (if-not error
+                       (do
+                         (when (or print-nil-expression?
+                                   (not (nil? value)))
+                           (pr-cb value))
+                         (when-not
+                           (or ('#{*1 *2 *3 *e} expression-form)
+                               (ns-form? expression-form))
+                           (set! *3 *2)
+                           (set! *2 *1)
+                           (set! *1 value))
+                         (reset! current-ns ns)
+                         nil)
+                       (do
+                         (set! *e error))))
+                 (when error
+                   (pr-cb error))))
+              (catch :default e
+                (pr-cb e)
+                #_(print-error e))))))
+      (catch :default e (pr-cb e)))))
 

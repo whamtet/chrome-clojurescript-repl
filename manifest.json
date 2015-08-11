@@ -3,7 +3,7 @@
 
   "name": "ClojureScript REPL (Self Hosting)",
   "description": "Self Hosting ClojureScript REPL for Chrome DevTools",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": "Matthew Molloy",
 
   "devtools_page": "devtools.html",
