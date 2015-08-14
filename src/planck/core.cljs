@@ -220,13 +220,18 @@
     (throw error))
 
 ;;insert the bitch
-(if (and js/chrome.devtools (not js/cljs))
-  (js/chrome.devtools.inspectedWindow.eval
-   (str "
-        var s = document.createElement('script');
-        s.src= 'chrome-extension://" js/chrome.runtime.id "/out/self_compile.js'
-        document.head.appendChild(s)")))
+(def code-injected? (atom false))
+(js/chrome.devtools.network.onNavigated.addListener #(reset! code-injected? false))
+(if js/$.get (js/$.get "/out/self_compile.js" #(def src %)))
 
+(defn insertion-code []
+  (when-not @code-injected?
+    (reset! code-injected? true)
+    (str "
+         if (!window.cljs) {"
+         src
+         "}
+         ")))
 
 (defn ^:export read-eval-print [source cb]
   (let [
@@ -260,14 +265,19 @@
                expression-form
                {:ns         @current-ns
                 :load       load
-                :eval       (fn [{:keys [source] :as x}]
-                              (try (js/chrome.devtools.inspectedWindow.eval source
-                                                                            (fn [res err]
-                                                                              (if res
-                                                                                (cb res)
-                                                                                (pr-cb err))))
-
-                                (catch :default e (pr-cb e))))
+                :eval       (fn [{:keys [source]}]
+                              (let [
+                                    source (str (insertion-code) source)
+                                    ]
+                                (try
+                                  (if js/chrome.devtools
+                                    (js/chrome.devtools.inspectedWindow.eval source
+                                                                             (fn [res err]
+                                                                               (if res
+                                                                                 (cb res)
+                                                                                 (pr-cb err))))
+                                    (cb (js/eval source)))
+                                  (catch :default e (pr-cb e)))))
                 :source-map false
                 :verbose    (:verbose @app-env)
                 :context       :expr

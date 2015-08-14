@@ -13,3 +13,4 @@ var controller = container.console({
   animateScroll:true,
   promptHistory:true,
 });
+
