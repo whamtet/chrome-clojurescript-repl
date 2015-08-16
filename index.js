@@ -11,6 +11,17 @@ var controller = container.console({
 //  commandHandle: self_compile.core.cb,
   autofocus:true,
   animateScroll:true,
-  promptHistory:true,
+  notifyPush: planck.core.notify_push,
+  history: planck.core.get_history()
 });
 
+
+
+var attributes = function(element) {
+  out = []
+  for (var i = 0; i < element.attributes.length; i++) {
+    var x = element.attributes[i]
+    out.push([x.nodeName, x.nodeValue])
+  }
+  return out
+}

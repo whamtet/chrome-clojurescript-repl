@@ -1,6 +1,5 @@
 (ns planck.core
   (:require-macros [cljs.env.macros :refer [with-compiler-env]]
-                   [planck.macro]
                    )
   (:require [cljs.js :as cljs]
             [cljs.tagged-literals :as tags]
@@ -10,7 +9,10 @@
             [cljs.stacktrace :as st]
             [cljs.source-map :as sm]
             [tailrecursion.cljson :refer [cljson->clj]]
+            [alandipert.storage-atom :as storage-atom]
             ))
+
+(enable-console-print!)
 
 (defonce st (cljs/empty-state))
 
@@ -113,31 +115,14 @@
     :js
     :clj))
 
-(defn load-and-callback! [path extension cb]
-  (when-let [source (js/PLANCK_LOAD (str path extension))]
-    (cb {:lang   (extension->lang extension)
-         :source source})
-    :loaded))
+(def banned #{'clojure.string})
 
 (defn load [{:keys [name macros path] :as full} cb]
-  (let [
-        source (case name
-                 a.b "(ns a.b (:require-macros [repl.macros]))"
-                 repl.macros "(ns repl.macros) (defmacro m [] 3)")
-        ]
-    (println source)
-    (cb {:lang :clj
-         :source source}))
-  #_(loop [extensions (if macros
-                        [".clj" ".cljc"]
-                        [".cljs" ".cljc" ".js"])]
-      (if extensions
-        (when-not (load-and-callback! path (first extensions) cb)
-          (recur (next extensions)))
-        (cb nil))))
+;  (println "looad" name macros path (type name))
+  (js/$.get (str "http://localhost:5000/?path=" path "&name=" name)
+            #(cb (repl-read-string %))))
 
 (defn require [macros-ns? sym reload]
-  (prn ["pzzt" macros-ns? sym reload])
   (cljs.js/require
    {:*compiler*     st
     :*data-readers* tags/*cljs-data-readers*
@@ -146,7 +131,7 @@
    sym
    reload
    {:macros-ns  macros-ns?
-    :verbose    (:verbose @app-env)
+    :verbose    false
     :source-map true}
    (fn [res]
      (println "require result:" res))))
@@ -172,8 +157,88 @@
 
 (defn require-destructure [macros-ns? args]
   (let [[[_ sym] reload] args]
-    (prn [_ sym reload])
     (require macros-ns? sym reload)))
+
+(defn- canonicalize-specs [specs]
+  (letfn [(canonicalize [quoted-spec-or-kw]
+                        (if (keyword? quoted-spec-or-kw)
+                          quoted-spec-or-kw
+                          (as-> (second quoted-spec-or-kw) spec
+                                (if (vector? spec) spec [spec]))))]
+    (map canonicalize specs)))
+
+(defn- process-reloads! [specs]
+  (if-let [k (some #{:reload :reload-all} specs)]
+    (let [specs (->> specs (remove #{k}))]
+      (if (= k :reload-all)
+        (reset! cljs.js/*loaded* #{})
+        (apply swap! cljs.js/*loaded* disj (map first specs)))
+      specs)
+    specs))
+
+(defn- self-require? [specs]
+  (some
+   (fn [quoted-spec-or-kw]
+     (and (not (keyword? quoted-spec-or-kw))
+          (let [spec (second quoted-spec-or-kw)
+                ns (if (sequential? spec)
+                     (first spec)
+                     spec)]
+            (= ns @current-ns))))
+   specs))
+
+(defn- process-require
+  [macros-ns? cb specs]
+  (try
+    (let [is-self-require? (self-require? specs)
+          [target-ns restore-ns]
+          (if-not is-self-require?
+            [@current-ns nil]
+            ['cljs.user @current-ns])
+          pr-cb #(cb (pr-str %))
+          ]
+      (cljs/eval
+       st
+       (let [ns-form `(~'ns ~target-ns
+                            (~(if macros-ns?
+                                :require-macros :require)
+                              ~@(-> specs canonicalize-specs process-reloads!)))]
+         (when (:verbose @app-env)
+           (println "Implementing"
+                    (if macros-ns?
+                      "require-macros"
+                      "require")
+                    "via ns:\n  "
+                    (pr-str ns-form)))
+         ns-form)
+       {:ns      @current-ns
+        :context :expr
+        :verbose (:verbose @app-env)
+        :load load
+        :eval
+        (fn [{:keys [source]}]
+          (let [
+                source2 (str (insertion-code) source)
+                ]
+            (try
+              (if js/chrome.devtools
+                (js/chrome.devtools.inspectedWindow.eval
+                 source2
+                 (fn [res err]
+                   (if-not res
+                     (println err))))
+                (js/eval source))
+              (catch :default e (println e)))))
+        }
+       (fn [{e :error}]
+         (when is-self-require?
+           (reset! current-ns restore-ns))
+         (when e
+           (println e))
+         )))
+    (catch :default e
+      (println e))))
+
 
 (defn ^:export run-main [main-ns args]
   (let [main-args (js->clj args)]
@@ -221,7 +286,8 @@
 
 ;;insert the bitch
 (def code-injected? (atom false))
-(js/chrome.devtools.network.onNavigated.addListener #(reset! code-injected? false))
+(if js/chrome.devtools
+  (js/chrome.devtools.network.onNavigated.addListener #(reset! code-injected? false)))
 (if js/$.get (js/$.get "/out/self_compile.js" #(def src %)))
 
 (defn insertion-code []
@@ -233,6 +299,27 @@
          "}
          ")))
 
+(defn ^:export insert-js [src]
+  (let [
+        s (js/document.createElement "script")
+        ]
+    (set! (.-src s) src)
+    (js/document.head.appendChild s)))
+
+(defn fix-js [s]
+  (reduce (fn [s match]
+            (.replace
+             s match (str "try{" match "}catch(e){}")))
+          s
+          (re-seq #"goog.provide\(\".+?\"\);" s)))
+
+(defn ^:export require-code [url]
+  (let [
+        url (or url "http://localhost:5000/")
+        ]
+    (js/$.get url #(-> % #_fix-js js/eval))))
+
+
 (defn ^:export read-eval-print [source cb]
   (let [
         pr-cb #(cb (pr-str %))
@@ -243,23 +330,29 @@
                 r/*data-readers* tags/*cljs-data-readers*]
         (let [
               expression-form (repl-read-string source)
-              expression-form (list 'pr-str expression-form)
               ]
           (if (repl-special? expression-form)
-            (let [env (assoc (ana/empty-env) :context :expr
+            (let [env (assoc
+                        (ana/empty-env)
+                        :context :expr
                         :ns {:name @current-ns})]
               (cb "")
               (case (first expression-form)
                 defmacro (define-macro source)
                 in-ns (reset! current-ns (second (second expression-form)))
-                require (require-destructure false (rest expression-form))
-                require-macros (require-destructure true (rest expression-form))
+                require (process-require false cb (rest expression-form))
+                require-macros (process-require true cb (rest expression-form))
                 doc (if (repl-specials (second expression-form))
                       (repl/print-doc (repl-special-doc (second expression-form)))
                       (repl/print-doc
                        (let [sym (second expression-form)]
                          (with-compiler-env st (resolve env sym)))))))
-            (try
+            (let [
+                  expression-form (if (= 'inject-js expression-form)
+                                    (list 'js/planck.core.insert-js
+                                          (js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
+                                    (list 'pr-str expression-form))
+                  ]
               (cljs/eval
                st
                expression-form
@@ -267,42 +360,62 @@
                 :load       load
                 :eval       (fn [{:keys [source]}]
                               (let [
-                                    source (str (insertion-code) source)
+                                    source2 (str (insertion-code) source)
                                     ]
                                 (try
                                   (if js/chrome.devtools
-                                    (js/chrome.devtools.inspectedWindow.eval source
-                                                                             (fn [res err]
-                                                                               (if res
-                                                                                 (cb res)
-                                                                                 (pr-cb err))))
+                                    (js/chrome.devtools.inspectedWindow.eval
+                                     source2
+                                     (fn [res err]
+                                       (if res
+                                         (cb res)
+                                         (pr-cb err))))
                                     (cb (js/eval source)))
                                   (catch :default e (pr-cb e)))))
                 :source-map false
                 :verbose    (:verbose @app-env)
                 :context       :expr
-                :def-emits-var true}
+                :def-emits-var true
+                }
                (fn [{:keys [ns value error] :as ret}]
-                 #_(if expression?
-                     (if-not error
-                       (do
-                         (when (or print-nil-expression?
-                                   (not (nil? value)))
-                           (pr-cb value))
-                         (when-not
-                           (or ('#{*1 *2 *3 *e} expression-form)
-                               (ns-form? expression-form))
-                           (set! *3 *2)
-                           (set! *2 *1)
-                           (set! *1 value))
-                         (reset! current-ns ns)
-                         nil)
-                       (do
-                         (set! *e error))))
                  (when error
-                   (pr-cb error))))
-              (catch :default e
-                (pr-cb e)
-                #_(print-error e))))))
+                   (pr-cb error))))))))
       (catch :default e (pr-cb e)))))
 
+(def history-atom (storage-atom/local-storage (atom [])))
+(def get-history #(clj->js @history-atom))
+(defn notify-push [line]
+  (swap! history-atom
+         #(let [
+                updated (conj % line)
+                new-len (count updated)
+                max-len 10
+                ]
+            (if (< max-len new-len)
+              (subvec updated (- new-len max-len))
+              updated))))
+
+(def attributes (js/Function.
+                 "element"
+                 "  out = []
+                 for (var i = 0; i < element.attributes.length; i++) {
+                 var x = element.attributes[i]
+                 out.push([x.nodeName, x.nodeValue])
+                 }
+                 return out"))
+
+(defn dom2edn [element]
+  (if (.-tagName element)
+    (let [
+          a (-> element .-tagName .toLowerCase keyword)
+          b (into {} (map (fn [[a b]] [(keyword a) b]) (js->clj (attributes element))))
+          children (filter identity (map dom2edn (array-seq (.-childNodes element))))
+          ]
+      (if (not-empty children)
+        [a b children]
+        [a b]))
+    (if (.-textContent element)
+      (let [
+            trimmed (-> element .-textContent .trim)
+            ]
+        (if (not-empty trimmed) trimmed)))))
