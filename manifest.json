@@ -10,8 +10,15 @@
 
   "permissions": [
     "tabs",
-    "*://*/*"
+    "*://*/*",
+    "webRequest",
+    "webRequestBlocking"
   ],
+
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
 
   "icons": { "16": "icon16.png",
             "48": "icon48.png",

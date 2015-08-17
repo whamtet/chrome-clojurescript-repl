@@ -117,9 +117,9 @@
 
 (def banned #{'clojure.string})
 
-(defn load [{:keys [name macros path] :as full} cb]
+(defn load [sym {:keys [name macros path] :as full} cb]
 ;  (println "looad" name macros path (type name))
-  (js/$.get (str "http://localhost:5000/?path=" path "&name=" name)
+  (js/$.get (str "http://localhost:5000/?path=" path "&name=" name "&sym=" sym)
             #(cb (repl-read-string %))))
 
 (defn require [macros-ns? sym reload]
@@ -196,6 +196,7 @@
             [@current-ns nil]
             ['cljs.user @current-ns])
           pr-cb #(cb (pr-str %))
+          require-sym (rand-int 1e10)
           ]
       (cljs/eval
        st
@@ -214,7 +215,7 @@
        {:ns      @current-ns
         :context :expr
         :verbose (:verbose @app-env)
-        :load load
+        :load #(load require-sym %1 %2)
         :eval
         (fn [{:keys [source]}]
           (let [
@@ -299,25 +300,14 @@
          "}
          ")))
 
-(defn ^:export insert-js [src]
+(defn ^:export reload [server root]
   (let [
+        server (or server "http://localhost:5000/")
+        root (or root "cljs_server.core")
         s (js/document.createElement "script")
         ]
-    (set! (.-src s) src)
+    (set! (.-src s) (str server "?root=" root))
     (js/document.head.appendChild s)))
-
-(defn fix-js [s]
-  (reduce (fn [s match]
-            (.replace
-             s match (str "try{" match "}catch(e){}")))
-          s
-          (re-seq #"goog.provide\(\".+?\"\);" s)))
-
-(defn ^:export require-code [url]
-  (let [
-        url (or url "http://localhost:5000/")
-        ]
-    (js/$.get url #(-> % #_fix-js js/eval))))
 
 
 (defn ^:export read-eval-print [source cb]

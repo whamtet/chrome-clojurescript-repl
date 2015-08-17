@@ -8,5 +8,5 @@
            {:main 'planck.core
             :output-to "out/self_compile.js"
             :output-dir "out"
-;            :optimizations :whitespace
+            :optimizations :whitespace
             }))
