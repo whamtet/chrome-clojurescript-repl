@@ -302,14 +302,15 @@
 
 (defn ^:export load-js
   ([]
-   (load-js "http://localhost:7000/" "cljs_server.core"))
-  ([url]
-   (let [s (js/document.createElement "script")]
-     (set! (.-src s) url)
-     (js/document.head.appendChild s)))
+   (load-js "cljs_server.core"))
+  ([root]
+   (load-js "https://localhost" root))
   ([server root]
-   (load-js (str server "?root=" root))))
-
+   (let [
+         url (str server "?root=" root)
+         s (js/document.createElement "script")]
+     (set! (.-src s) url)
+     (js/document.head.appendChild s))))
 
 (defn ^:export read-eval-print [source cb]
   (let [
@@ -341,8 +342,11 @@
             (let [
                   expression-form (cond
                                    (= 'load expression-form) `(js/planck.core.load-js)
-                                   (= 'inject-js expression-form)
-                                   `(js/planck.core.load-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
+                                   (and (seq? expression-form)
+                                        (= 'load (first expression-form)))
+                                   `(js/planck.core.load-js ~@(rest expression-form))
+;                                   (= 'inject-js expression-form)
+;                                   `(js/planck.core.load-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
                                    :default `(pr-str ~expression-form))
                   ]
               (cljs/eval
