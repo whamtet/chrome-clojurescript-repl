@@ -117,7 +117,7 @@
 
 (def banned #{'clojure.string})
 
-(defn load [sym {:keys [name macros path] :as full} cb]
+#_(defn load [sym {:keys [name macros path] :as full} cb]
 ;  (println "looad" name macros path (type name))
   (js/$.get (str "http://localhost:5000/?path=" path "&name=" name "&sym=" sym)
             #(cb (repl-read-string %))))
@@ -300,14 +300,15 @@
          "}
          ")))
 
-(defn ^:export reload [server root]
-  (let [
-        server (or server "http://localhost:5000/")
-        root (or root "cljs_server.core")
-        s (js/document.createElement "script")
-        ]
-    (set! (.-src s) (str server "?root=" root))
-    (js/document.head.appendChild s)))
+(defn ^:export load-js
+  ([]
+   (load-js "http://localhost:7000/" "cljs_server.core"))
+  ([url]
+   (let [s (js/document.createElement "script")]
+     (set! (.-src s) url)
+     (js/document.head.appendChild s)))
+  ([server root]
+   (load-js (str server "?root=" root))))
 
 
 (defn ^:export read-eval-print [source cb]
@@ -338,10 +339,11 @@
                        (let [sym (second expression-form)]
                          (with-compiler-env st (resolve env sym)))))))
             (let [
-                  expression-form (if (= 'inject-js expression-form)
-                                    (list 'js/planck.core.insert-js
-                                          (js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
-                                    (list 'pr-str expression-form))
+                  expression-form (cond
+                                   (= 'load expression-form) `(js/planck.core.load-js)
+                                   (= 'inject-js expression-form)
+                                   `(js/planck.core.load-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
+                                   :default `(pr-str ~expression-form))
                   ]
               (cljs/eval
                st
@@ -384,28 +386,3 @@
             (if (< max-len new-len)
               (subvec updated (- new-len max-len))
               updated))))
-
-(def attributes (js/Function.
-                 "element"
-                 "  out = []
-                 for (var i = 0; i < element.attributes.length; i++) {
-                 var x = element.attributes[i]
-                 out.push([x.nodeName, x.nodeValue])
-                 }
-                 return out"))
-
-(defn dom2edn [element]
-  (if (.-tagName element)
-    (let [
-          a (-> element .-tagName .toLowerCase keyword)
-          b (into {} (map (fn [[a b]] [(keyword a) b]) (js->clj (attributes element))))
-          children (filter identity (map dom2edn (array-seq (.-childNodes element))))
-          ]
-      (if (not-empty children)
-        [a b children]
-        [a b]))
-    (if (.-textContent element)
-      (let [
-            trimmed (-> element .-textContent .trim)
-            ]
-        (if (not-empty trimmed) trimmed)))))
