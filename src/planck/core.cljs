@@ -289,7 +289,7 @@
 (def code-injected? (atom false))
 (if js/chrome.devtools
   (js/chrome.devtools.network.onNavigated.addListener #(reset! code-injected? false)))
-(if js/$.get (js/$.get "/out/self_compile.js" #(def src %)))
+(if (and js/$ js/$.get) (js/$.get "/out/self_compile.js" #(def src %)))
 
 (defn insertion-code []
   (when-not @code-injected?
@@ -311,6 +311,12 @@
          s (js/document.createElement "script")]
      (set! (.-src s) url)
      (js/document.head.appendChild s))))
+
+(defn ^:export inject-js [url]
+  (let [
+        s (js/document.createElement "script")]
+    (set! (.-src s) url)
+    (js/document.head.appendChild s)))
 
 (defn ^:export read-eval-print [source cb]
   (let [
@@ -345,8 +351,8 @@
                                    (and (seq? expression-form)
                                         (= 'load (first expression-form)))
                                    `(js/planck.core.load-js ~@(rest expression-form))
-;                                   (= 'inject-js expression-form)
-;                                   `(js/planck.core.load-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
+                                   (= 'inject-js expression-form)
+                                   `(js/planck.core.inject-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
                                    :default `(pr-str ~expression-form))
                   ]
               (cljs/eval
