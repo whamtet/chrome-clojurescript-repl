@@ -304,7 +304,7 @@
   ([]
    (load-js "cljs_server.core"))
   ([root]
-   (load-js "https://localhost" root))
+   (load-js "https://localhost:8000" root))
   ([server root]
    (let [
          url (str server "?root=" root)
