@@ -29,13 +29,14 @@ chrome.runtime.onConnect.addListener(function(port) {
 
     if (port.name !== "devtools") return;
     ports.push(port);
+    notifyDevtools(isActive);
     // Remove port when destroyed (eg when devtools instance is closed)
     port.onDisconnect.addListener(function() {
         var i = ports.indexOf(port);
         if (i !== -1) ports.splice(i, 1);
     });
     port.onMessage.addListener(function(msg) {
-      isActive = !isActive;
+      isActive = msg;
       notifyDevtools(isActive);
     });
 });

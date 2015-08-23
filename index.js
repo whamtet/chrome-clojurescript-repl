@@ -17,5 +17,6 @@ function do_something(msg) {
 }
 
 $('#cb').click(function() {
-  respond('click');
+//  respond('click');
+  respond(document.getElementById('cb').checked)
 })
