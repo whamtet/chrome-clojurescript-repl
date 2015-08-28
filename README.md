@@ -10,6 +10,10 @@ To auto build your project in dev mode:
 
 Then load the extension in Google Chrome.  Go to chrome://extensions, check developer mode and click load unpacked extension.
 
+## Server
+
+Use Clojurescript Repl with [cljs-server](https://github.com/whamtet/cljs-server) for a convenient development workflow.
+
 ## License
 
 Copyright © 2015 Matthew Molloy

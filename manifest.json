@@ -25,7 +25,7 @@
             "48": "icon48.png",
             "128": "icon128.png" },
 
-  "content_security_policy": "script-src 'self' http://localhost:* 'unsafe-eval'; object-src 'self'",
+  "content_security_policy": "script-src 'self' http://localhost:* https://localhost:* 'unsafe-eval'; object-src 'self'",
 
   "web_accessible_resources": [
     "/out/self_compile.js",
