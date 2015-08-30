@@ -295,7 +295,7 @@
   (when-not @code-injected?
     (reset! code-injected? true)
     (str "
-         if (!window.cljs) {"
+         if (!window.cljs || !window.cljs.core) {"
          src
          "}
          ")))
