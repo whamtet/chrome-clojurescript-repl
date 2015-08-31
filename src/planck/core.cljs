@@ -295,7 +295,9 @@
   (when-not @code-injected?
     (reset! code-injected? true)
     (str "
-         if (!window.cljs || !window.cljs.core) {"
+         if (!window.cljs || !window.cljs.core) {
+         delete Element.prototype.appendChild;
+         "
          src
          "}
          ")))
@@ -310,6 +312,7 @@
          url (str server "?root=" root)
          s (js/document.createElement "script")]
      (set! (.-src s) url)
+     (js/eval "delete Element.prototype.appendChild")
      (js/document.head.appendChild s))))
 
 (defn ^:export inject-js [url]
