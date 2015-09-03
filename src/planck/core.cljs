@@ -10,6 +10,7 @@
             [cljs.source-map :as sm]
             [tailrecursion.cljson :refer [cljson->clj]]
             [alandipert.storage-atom :as storage-atom]
+            [dom2edn.core]
             ))
 
 (enable-console-print!)

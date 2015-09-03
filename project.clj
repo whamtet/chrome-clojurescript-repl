@@ -5,6 +5,7 @@
                  [org.clojure/clojurescript "1.7.48"]
                  [tailrecursion/cljson "1.0.7"]
                  [alandipert/storage-atom "1.2.4"]
+                 [dom2edn "0.1.0"]
                  ]
   :jvm-opts ^:replace ["-Xmx1g" "-server"]
   :node-dependencies [[source-map-support "0.3.2"]]
