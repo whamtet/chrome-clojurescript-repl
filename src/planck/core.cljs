@@ -300,7 +300,9 @@
          delete Element.prototype.appendChild;
          "
          src
-         "}
+         "
+         cljs.user = {};
+         }
          ")))
 
 (defn ^:export load-js
@@ -357,6 +359,9 @@
                                    `(js/planck.core.load-js ~@(rest expression-form))
                                    (= 'inject-js expression-form)
                                    `(js/planck.core.inject-js ~(js/chrome.extension.getURL "/jquery-2.1.1.min.js"))
+                                   (and (seq? expression-form)
+                                        (= 'dom2edn (first expression-form)))
+                                   `(js/dom2edn.core.dom2edn ~@(rest expression-form))
                                    :default `(pr-str ~expression-form))
                   ]
               (cljs/eval
