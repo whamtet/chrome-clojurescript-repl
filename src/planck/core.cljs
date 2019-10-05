@@ -290,7 +290,6 @@
 (def code-injected? (atom false))
 (if js/chrome.devtools
   (js/chrome.devtools.network.onNavigated.addListener #(reset! code-injected? false)))
-(if (and js/$ js/$.get) (js/$.get "/out/self_compile.js" #(def src %)))
 
 (defn insertion-code []
   (when-not @code-injected?
@@ -299,7 +298,7 @@
          if (!window.cljs || !window.cljs.core) {
          delete Element.prototype.appendChild;
          "
-         src
+         js/cljsSrc
          "
          cljs.user = {};
          }

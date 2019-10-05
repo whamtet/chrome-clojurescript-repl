@@ -1,7 +1,6 @@
 (ns self-compile.watch)
 
 (require '[cljs.build.api :as b])
-(require '[clojure.java.shell :as shell])
 
 (defn -main [& args]
   (b/watch "src"

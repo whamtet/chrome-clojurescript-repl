@@ -20,3 +20,10 @@ $('#cb').click(function() {
 //  respond('click');
   respond(document.getElementById('cb').checked)
 })
+
+let cljsSrc;
+const loadSrc = async () => {
+  const response = await fetch("/out/self_compile.js");
+  cljsSrc = await response.text();
+}
+loadSrc();
